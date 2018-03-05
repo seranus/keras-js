@@ -54,7 +54,7 @@ export default class PixelShuffler extends Layer {
 
         //unpack input shape
 
-        //mul and/ die calculations
+        //mul and div calculations
 
         //call reshape
 
@@ -66,7 +66,7 @@ export default class PixelShuffler extends Layer {
 
         //unpack input shape
 
-        //mul and/ die calculations
+        //mul and div calculations
 
         //call reshape
 
