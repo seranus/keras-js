@@ -1,6 +1,7 @@
 import Layer from '../../Layer'
 import Tensor from '../../Tensor'
 
+
 /**
  * PixelShuffler layer class
  * Imported layer bassed on code:
@@ -12,16 +13,24 @@ export default class PixelShuffler extends Layer {
      * Creates an PixelShuffler layer
      *
      * @param {Object} [attrs] - layer config attributes
-     * @param {number[]} [attrs.inputs]
+     * @param {number|number[]} [attrs.size] - upsampling factor, int or tuple of int (length 2)
+     * @param {string} [attrs.data_format] - either 'channels_last' or 'channels_first'
      */
     constructor(attrs = {}) {
         super(attrs)
         this.layerClass = 'PixelShuffler'
 
-        const { inputs = [] } = attrs
+        const { size = [2, 2], data_format = 'channels_last' } = attrs
 
-        //TODO
-        //Load config attributes
+        if (Array.isArray(size)) {
+            this.size = size
+        } else {
+            this.size = [size, size]
+        }
+
+        this.dataFormat = data_format
+
+        this.description = `size ${this.size.join('x')} data format ${this.dataFormat}`
     }
 
 
@@ -46,33 +55,44 @@ export default class PixelShuffler extends Layer {
     * @param {Tensor} x
     */
     _callCPU(x) {
-        //Import flow
 
-        //Check input shape size
+        if (x.tensor.shape.length !== 4 && x.tensor.shape.length  !== 3) {
+            throw new Error("Input shape length invalid: " + x.length)
+        }
 
-        //if data_format
+        let batch_size, c, h, w
 
-        //unpack input shape
+        if (this.dataFormat === 'channels_first') {
+            if (x.tensor.shape.length === 3) {
+                [c, h, w] = x.tensor.shape
+                batch_size = -1
+            } else {
+                [batch_size, c, h, w] = x.tensor.shape
+            }
 
-        //mul and div calculations
+            let [rh, rw] = this.size;
+            let [oh, ow] = [h * rh, w * rw];
+            let oc = math.floor(x / (rh * rw)) //integer division, JS doesn't have int division, slower preformace compared to native int division 
+            //out = K.reshape(inputs, (batch_size, h, w, rh, rw, oc))
+            //out = K.permute_dimensions(out, (0, 1, 3, 2, 4, 5))
+            //out = K.reshape(out, (batch_size, oh, ow, oc))
 
-        //call reshape
+            //let out = 
 
-        //call permute
+        } else if (this.dataFormat === 'channels_last') {
+            if (x.tensor.shape.length === 3) {
+                [h, w, c] = x.tensor.shape
+                batch_size = -1
+            } else {
+                [batch_size, c, h, w] = x.tensor.shape
+            }
 
-        //call reshape
+            let [rh, rw] = this.size;
+            let [oh, ow] = [h * rh, w * rw];
+            let oc = math.floor(x / (rh * rw))
+        }
 
-        //else if data_format
-
-        //unpack input shape
-
-        //mul and div calculations
-
-        //call reshape
-
-        //call permute
-
-        //call reshape
+        this.output = x;
     }
 
 

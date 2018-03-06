@@ -18,7 +18,17 @@
     "type": "git",
     "url": "git+https://github.com/transcranial/keras-js.git"
   },
-  "keywords": ["keras", "deep", "learning", "neural", "networks", "javascript", "webgl", "webgl2", "gpu"],
+  "keywords": [
+    "keras",
+    "deep",
+    "learning",
+    "neural",
+    "networks",
+    "javascript",
+    "webgl",
+    "webgl2",
+    "gpu"
+  ],
   "author": "Leon Chen <leon@md.ai>",
   "license": "MIT",
   "bugs": {
