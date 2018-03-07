@@ -1,6 +1,7 @@
 import Layer from '../../Layer'
 import Tensor from '../../Tensor'
-
+import _ from 'lodash'
+import ops from 'ndarray-ops'
 
 /**
  * PixelShuffler layer class
@@ -56,43 +57,57 @@ export default class PixelShuffler extends Layer {
     */
     _callCPU(x) {
 
-        if (x.tensor.shape.length !== 4 && x.tensor.shape.length  !== 3) {
+        if (x.tensor.shape.length !== 4 && x.tensor.shape.length !== 3) {
             throw new Error("Input shape length invalid: " + x.length)
         }
 
-        let batch_size, c, h, w
-
+        //output shape
+        //shape[0] expected to be always none
+        //none is unsuported
         if (this.dataFormat === 'channels_first') {
-            if (x.tensor.shape.length === 3) {
-                [c, h, w] = x.tensor.shape
-                batch_size = -1
-            } else {
-                [batch_size, c, h, w] = x.tensor.shape
-            }
+            [c, h, w] = x.tensor.shape
 
-            let [rh, rw] = this.size;
-            let [oh, ow] = [h * rh, w * rw];
-            let oc = math.floor(x / (rh * rw)) //integer division, JS doesn't have int division, slower preformace compared to native int division 
-            //out = K.reshape(inputs, (batch_size, h, w, rh, rw, oc))
-            //out = K.permute_dimensions(out, (0, 1, 3, 2, 4, 5))
-            //out = K.reshape(out, (batch_size, oh, ow, oc))
+            let [rh, rw] = this.size
+            let [oh, ow] = [h * rh, w * rw]
+            let oc = Math.floor(c / (rh * rw)) //integer division, JS doesn't have int division, slower preformace compared to native
 
-            //let out = 
+            //TODO optimize
+            //reshape
+            let out_1 = new Tensor([], [rh, rw, oc, h, w])
+            out_1.replaceTensorData(x.tensor.data)
+
+            //permute
+            let dims = [2, 3, 0, 4, 1]
+            const out_2_Shape = dims.map(i => out_1.tensor.shape[i])
+            let out_2 = new Tensor([], out_2_Shape)
+            ops.assign(out_2.tensor, out_1.tensor.transpose(...dims))
+
+            //reshape
+            this.output = new Tensor([], [oc, oh, ow])
+            this.output.replaceTensorData(out_2.tensor.data)
 
         } else if (this.dataFormat === 'channels_last') {
-            if (x.tensor.shape.length === 3) {
-                [h, w, c] = x.tensor.shape
-                batch_size = -1
-            } else {
-                [batch_size, c, h, w] = x.tensor.shape
-            }
+            [h, w, c] = x.tensor.shape
 
-            let [rh, rw] = this.size;
-            let [oh, ow] = [h * rh, w * rw];
-            let oc = math.floor(x / (rh * rw))
+            let [rh, rw] = this.size
+            let [oh, ow] = [h * rh, w * rw]
+            let oc = Math.floor(c / (rh * rw))
+
+            //TODO optimize
+            //reshape
+            let out_1 = new Tensor([], [h, w, rh, rw, oc])
+            out_1.replaceTensorData(x.tensor.data)
+
+            //permute
+            let dims = [0, 2, 1, 3, 4]
+            const out_2_Shape = dims.map(i => out_1.tensor.shape[i])
+            let out_2 = new Tensor([], out_2_Shape)
+            ops.assign(out_2.tensor, out_1.tensor.transpose(...dims))
+
+            //reshape
+            this.output = new Tensor([], [oh, ow, oc])
+            this.output.replaceTensorData(out_2.tensor.data)
         }
-
-        this.output = x;
     }
 
 
@@ -104,5 +119,7 @@ export default class PixelShuffler extends Layer {
     _callGPU(x) {
         //TODO
         //Later
+
+        this.output = x
     }
 }
