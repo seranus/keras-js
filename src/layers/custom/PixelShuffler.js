@@ -43,7 +43,8 @@ export default class PixelShuffler extends Layer {
     */
     call(x) {
         if (this.gpu) {
-            this._callGPU(x)
+            //this._callGPU(x)
+            this._callCPU(x)
         } else {
             this._callCPU(x)
         }
@@ -65,7 +66,7 @@ export default class PixelShuffler extends Layer {
         //shape[0] expected to be always none
         //none is unsuported
         if (this.dataFormat === 'channels_first') {
-            [c, h, w] = x.tensor.shape
+            let [c, h, w] = x.tensor.shape
 
             let [rh, rw] = this.size
             let [oh, ow] = [h * rh, w * rw]
@@ -87,7 +88,7 @@ export default class PixelShuffler extends Layer {
             this.output.replaceTensorData(out_2.tensor.data)
 
         } else if (this.dataFormat === 'channels_last') {
-            [h, w, c] = x.tensor.shape
+            let [h, w, c] = x.tensor.shape
 
             let [rh, rw] = this.size
             let [oh, ow] = [h * rh, w * rw]
