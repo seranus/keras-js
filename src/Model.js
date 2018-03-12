@@ -21,6 +21,7 @@ export default class Model {
    * @param {string} config.filepath - path to protobuf-serialized model definition file
    * @param {Object} [config.headers] - any additional HTTP headers required for resource fetching
    * @param {Object} [config.filesystem] - specifies that data files are from local file system (Node.js only)
+   * @param {Object} [config.binary] - specifies that filepath data is binray inpput
    * @param {boolean} [config.gpu] - enable GPU
    * @param {boolean} [config.transferLayerOutputs] - in GPU mode, transfer outputs of each layer from GPU->CPU (warning: decreases performance)
    * @param {boolean} [config.pauseAfterLayerCalls] - break up blocking computation by layer, to allow for intervening DOM updates, for example
@@ -31,6 +32,7 @@ export default class Model {
       filepath = null,
       headers = {},
       filesystem = false,
+      binary = false,
       gpu = false,
       transferLayerOutputs = false,
       pauseAfterLayerCalls = false,
@@ -47,6 +49,8 @@ export default class Model {
 
     // specifies that data files are from local file system (Node.js only)
     this.filesystem = typeof window !== 'undefined' ? false : filesystem
+
+    this.binary = binary
 
     // event emitter
     this.events = new EventEmitter()
@@ -136,9 +140,15 @@ export default class Model {
    */
   async _initialize() {
     this.events.emit('loadingProgress', 0)
-    try {
-      const req = this.filesystem ? this._dataRequestFS() : this._dataRequestHTTP(this.headers)
-      await req
+      try {
+          if (this.binary) {
+              this._dataBinary();
+          }
+          else {
+              const req = this.filesystem ? this._dataRequestFS() : this._dataRequestHTTP(this.headers)
+              await req
+          }
+          
     } catch (err) {
       console.log(err)
       this._interrupt()
@@ -226,6 +236,21 @@ export default class Model {
       throw err
     }
   }
+
+    /**
+     * Convers binary input
+     *
+     * @returns {void}
+     */
+    async _dataBinary() {
+        try {
+            const file = this.filepath
+            this._decodeProtobuf(file)
+        } catch (err) {
+            throw err
+        }
+    }
+
 
   /**
    * Verifies and decodes binary buffer representing protobuf-serialized model definition file.

@@ -70,7 +70,7 @@ export default class PixelShuffler extends Layer {
 
             let [rh, rw] = this.size
             let [oh, ow] = [h * rh, w * rw]
-            let oc = Math.floor(c / (rh * rw)) //integer division, JS doesn't have int division, slower preformace compared to native
+            let oc = Math.floor(c / (rh * rw))
 
             //TODO optimize
             //reshape
@@ -111,6 +111,55 @@ export default class PixelShuffler extends Layer {
         }
     }
 
+    /**
+    * Creates row/col index mappings to map input texture to output texture
+    */
+    _createIndexMap() {
+        if (this.indexMap) {
+            return
+        }
+
+        const indices = new Tensor([], this.inputShape, { type: Int32Array })
+        const indicesRow = new Tensor([], this.inputShape, { type: Int32Array })
+        const indicesCol = new Tensor([], this.inputShape, { type: Int32Array })
+
+        if (this.inputShape.length === 2) {
+            for (let i = 0; i < this.inputShape[0]; i++) {
+                ops.assigns(indicesRow.tensor.pick(i, null), i)
+            }
+        } else if (this.inputShape.length === 3) {
+            for (let i = 0; i < this.inputShape[0]; i++) {
+                for (let j = 0; j < this.inputShape[1]; j++) {
+                    ops.assigns(indicesRow.tensor.pick(i, j, null), i * this.inputShape[1] + j)
+                }
+            }
+        } else if (this.inputShape.length === 4) {
+            for (let i = 0; i < this.inputShape[0]; i++) {
+                for (let j = 0; j < this.inputShape[1]; j++) {
+                    for (let k = 0; k < this.inputShape[2]; k++) {
+                        ops.assigns(
+                            indicesRow.tensor.pick(i, j, k, null),
+                            i * this.inputShape[1] * this.inputShape[2] + j * this.inputShape[2] + k
+                        )
+                    }
+                }
+            }
+        }
+        for (let c = 0; c < _.last(this.inputShape); c++) {
+            ops.assigns(indicesCol.tensor.pick(...Array(this.inputShape.length - 1).fill(null), c), c)
+        }
+        // i * cols + j
+        ops.muls(indices.tensor, indicesRow.tensor, _.last(this.inputShape))
+        ops.addeq(indices.tensor, indicesCol.tensor)
+
+        this.indexMap = new Tensor([], this.targetShape, { type: Int32Array })
+        this.indexMap.replaceTensorData(new Int32Array(indices.tensor.data))
+        if (this.targetShape.length > 2) {
+            this.indexMap.reshapeTo2D()
+        }
+
+        this.indexMap.createGLTexture({ type: '2d', format: 'int' })
+    }
 
     /**
     * GPU call
@@ -118,9 +167,99 @@ export default class PixelShuffler extends Layer {
     * @param {Tensor} x
     */
     _callGPU(x) {
-        //TODO
-        //Later
+        if (!x.glTexture) {
+            this.inputShape = x.tensor.shape
+            if (x.tensor.shape.length <= 2) {
+                x.createGLTexture({ type: '2d', format: 'float' })
+            } else if (x.tensor.shape.length > 2 && !x.is2DReshaped) {
+                x.reshapeTo2D()
+                x.createGLTexture({ type: '2d', format: 'float' })
+            }
+        } else if (x.is2DReshaped || x.is2DSquareReshaped) {
+            this.inputShape = x.originalShape
+        } else {
+            this.inputShape = x.tensor.shape
+        }
+        this._createIndexMap()
 
-        this.output = x
+        //copied from cpu, work in progress dont use
+        if (!this.output) {
+            if (this.dataFormat === 'channels_first') {
+                let [c, h, w] = x.tensor.shape
+
+                let [rh, rw] = this.size
+                let [oh, ow] = [h * rh, w * rw]
+                let oc = Math.floor(c / (rh * rw))
+
+                //TODO optimize
+                //reshape
+                let out_1 = new Tensor([], [rh, rw, oc, h, w])
+                out_1.reshapeTo2D()
+
+                //permute
+                let dims = [2, 3, 0, 4, 1]
+                const out_2_Shape = dims.map(i => out_1.tensor.shape[i])
+                let out_2 = new Tensor([], out_2_Shape)
+                out_2.reshapeTo2D()
+
+                //reshape
+                this.output = new Tensor([], [oc, oh, ow])
+                this.output.reshapeTo2D()
+
+            } else if (this.dataFormat === 'channels_last') {
+                let [h, w, c] = x.tensor.shape
+
+                let [rh, rw] = this.size
+                let [oh, ow] = [h * rh, w * rw]
+                let oc = Math.floor(c / (rh * rw))
+
+                //TODO optimize
+                //reshape
+                let out_1 = new Tensor([], [h, w, rh, rw, oc])
+                out_1.output.reshapeTo2D()
+
+                //permute
+                let dims = [0, 2, 1, 3, 4]
+                const out_2_Shape = dims.map(i => out_1.tensor.shape[i])
+                let out_2 = new Tensor([], out_2_Shape)
+                out_2.reshapeTo2D()
+
+                //reshape
+                this.output = new Tensor([], [oh, ow, oc])
+                this.output.reshapeTo2D()
+            }
+
+            this.output.createGLTexture({ type: '2d', format: 'float' })
+        }
+
+        //map not getting created after every input
+        webgl2.runProgram({
+            program: this.mapInputProgram,
+            output: this.out_1,
+            inputs: [{ input: x, name: 'x' }, { input: this.indexMap, name: 'indexMap' }],
+            uniforms: [{ value: x.glTextureShape[1], type: 'int', name: 'inputCols' }]
+        })
+        webgl2.runProgram({
+            program: this.mapInputProgram,
+            output: this.out_2,
+            inputs: [{ input: x, name: 'x' }, { input: this.indexMap, name: 'indexMap' }],
+            uniforms: [{ value: out_1.glTextureShape[1], type: 'int', name: 'inputCols' }]
+        })
+        webgl2.runProgram({
+            program: this.mapInputProgram,
+            output: this.output,
+            inputs: [{ input: x, name: 'x' }, { input: this.indexMap, name: 'indexMap' }],
+            uniforms: [{ value: out_2.glTextureShape[1], type: 'int', name: 'inputCols' }]
+        })
+
+        // GPU -> CPU data transfer
+        if (this.outbound.length === 0) {
+            this.output.transferFromGLTexture()
+            if (this.output.is2DReshaped) {
+                this.output.reshapeFrom2D()
+            } else if (this.output.is2DSquareReshaped) {
+                this.output.reshapeFrom2DSquare()
+            }
+        }
     }
 }
