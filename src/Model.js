@@ -140,15 +140,15 @@ export default class Model {
    */
   async _initialize() {
     this.events.emit('loadingProgress', 0)
-      try {
-          if (this.binary) {
-              this._dataBinary();
-          }
-          else {
-              const req = this.filesystem ? this._dataRequestFS() : this._dataRequestHTTP(this.headers)
-              await req
-          }
-          
+    try {
+      if (this.binary) {
+        this._dataBinary();
+      }
+      else {
+        const req = this.filesystem ? this._dataRequestFS() : this._dataRequestHTTP(this.headers)
+        await req
+      }
+
     } catch (err) {
       console.log(err)
       this._interrupt()
@@ -237,19 +237,19 @@ export default class Model {
     }
   }
 
-    /**
-     * Convers binary input
-     *
-     * @returns {void}
-     */
-    async _dataBinary() {
-        try {
-            const file = this.filepath
-            this._decodeProtobuf(file)
-        } catch (err) {
-            throw err
-        }
+  /**
+   * Convers binary input
+   *
+   * @returns {void}
+   */
+  async _dataBinary() {
+    try {
+      const file = this.filepath
+      this._decodeProtobuf(file)
+    } catch (err) {
+      throw err
     }
+  }
 
 
   /**
@@ -415,8 +415,13 @@ export default class Model {
     if (weightNames && weightNames.length) {
       const weights = weightNames.map(weightName => {
         const weightDef = _.find(this.modelWeights, w => {
-          const weightRE = new RegExp(`^.*${weightName}`)
-          return weightRE.test(w.weightName)
+          const weightRE = new RegExp(`^.*${weightName}`)  //hak moza treba maknut, ruèno mièem _broj/
+          let weightSer = w.weightName.split('_');
+          if (weightSer.length > 1) {
+            weightSer = weightSer[0] + '/' + weightSer[1].split('/')[1];
+          }
+
+          return weightRE.test(weightSer)
         })
 
         if (!weightDef) {
@@ -568,7 +573,7 @@ export default class Model {
       this.isRunning = false
       throw new Error(
         '[Model] predict() must take an object where the keys are the named inputs of the model: ' +
-          JSON.stringify(this.inputLayerNames)
+        JSON.stringify(this.inputLayerNames)
       )
     }
     if (!_.every(this.inputLayerNames, name => inputData[name] instanceof Float32Array)) {

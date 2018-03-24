@@ -3,6 +3,7 @@ import Tensor from '../../Tensor'
 import { webgl2 } from '../../WebGL2'
 import cwise from 'cwise'
 import programSource from './PReLU.glsl'
+import tile from 'ndarray-tile'
 
 /**
  * PReLU advanced activation layer class
@@ -62,7 +63,28 @@ export default class PReLU extends Layer {
    */
   _callCPU(x) {
     this.output = x
-    this._compute(this.output.tensor, this.weights['alpha'].tensor)
+
+    //https://github.com/transcranial/keras-js/issues/81
+    //Shared axsis kod
+    let alpha_tiled;
+    let tileAlphas = false;
+    let tiling = [];
+
+    for (let i = 0; i < x.tensor.shape.length; i++) {
+      if (x.tensor.shape[i] != this.weights['alpha'].tensor.shape[i]) {
+        tileAlphas = true;
+        tiling.push(x.tensor.shape[i]);
+      } else {
+        tiling.push(1);
+      }
+    }
+    if (tileAlphas) {
+      alpha_tiled = tile(this.weights['alpha'].tensor, tiling);
+    } else {
+      alpha_tiled = this.weights['alpha'].tensor;
+    }
+
+    this._compute(this.output.tensor, alpha_tiled)
   }
 
   /**
